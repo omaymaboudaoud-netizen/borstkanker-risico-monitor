@@ -14,8 +14,12 @@ df = pd.read_csv("screening.csv", sep=";")
 # GeoJSON met gemeentegrenzen
 import codecs
 
-with codecs.open("gemeenten_geo.json", "r", encoding="utf-8", errors="ignore") as f:
-    gemeenten_geo = json.load(f)
+import requests
+import json
+
+url = "https://raw.githubusercontent.com/PDOK/locatieserver/master/test/data/gemeenten.geojson"
+response = requests.get(url)
+gemeenten_geo = response.json()
 
 # ---------------------------------------------------------
 # 2. STREAMLIT LAYOUT
