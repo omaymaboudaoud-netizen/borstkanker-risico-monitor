@@ -20,8 +20,9 @@ def load_data():
         .str.replace(",", ".", regex=False)
         .astype(float)
     )
-    
-df["Gemeente"] = df["Gemeente"].astype(str).str.strip()
+
+    # Gemeente opschonen (strip-fix)
+    df["Gemeente"] = df["Gemeente"].astype(str).str.strip()
 
     # Risico-classificatie
     def classify_risk(p):
