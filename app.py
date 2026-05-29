@@ -15,18 +15,11 @@ df = pd.read_csv("screening.csv", sep=";")
 import codecs
 
 import requests
-import json
 
-url = "https://service.pdok.nl/kadaster/bestuurlijkegebieden/2022/wfs/v1_0?request=GetFeature&service=WFS&version=2.0.0&typeName=bestuurlijkegebieden:gemeente_gegeneraliseerd&outputFormat=application/json"
-
+url = "https://raw.githubusercontent.com/KoenVdBerg/geojson-nl/master/gemeenten_2021.geojson"
 response = requests.get(url)
 
-# Controleer of de server JSON teruggeeft
-try:
-    gemeenten_geo = response.json()
-except ValueError:
-    st.error("Kon GeoJSON niet laden. Server gaf geen geldig JSON terug.")
-    st.stop()
+gemeenten_geo = response.json()
 
 # ---------------------------------------------------------
 # 2. STREAMLIT LAYOUT
