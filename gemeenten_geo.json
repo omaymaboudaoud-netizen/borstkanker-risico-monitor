@@ -1,0 +1,61 @@
+{
+  "type": "FeatureCollection",
+  "name": "gemeenten_simplified",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "GM_CODE": "GM0014",
+        "GM_NAAM": "Aa en Hunze"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[6.6, 53.0], [6.7, 53.0], [6.7, 52.9], [6.6, 52.9], [6.6, 53.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "GM_CODE": "GM0034",
+        "GM_NAAM": "Achtkarspelen"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[6.1, 53.3], [6.2, 53.3], [6.2, 53.2], [6.1, 53.2], [6.1, 53.3]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "GM_CODE": "GM0047",
+        "GM_NAAM": "Ameland"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[5.6, 53.5], [5.8, 53.5], [5.8, 53.4], [5.6, 53.4], [5.6, 53.5]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "GM_CODE": "GM0059",
+        "GM_NAAM": "Appingedam"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[6.8, 53.3], [6.9, 53.3], [6.9, 53.2], [6.8, 53.2], [6.8, 53.3]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "GM_CODE": "GM0060",
+        "GM_NAAM": "Assen"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[6.5, 53.0], [6.6, 53.0], [6.6, 52.9], [6.5, 52.9], [6.5, 53.0]]]
+      }
+    }
+  ]
+}
