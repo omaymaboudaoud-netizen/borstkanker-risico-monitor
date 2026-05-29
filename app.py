@@ -12,7 +12,9 @@ from streamlit_folium import st_folium
 df = pd.read_csv("screening.csv", sep=";")
 
 # GeoJSON met gemeentegrenzen
-with open("gemeenten_geo.json", "r", encoding="utf-8") as f:
+import codecs
+
+with codecs.open("gemeenten_geo.json", "r", encoding="utf-8", errors="ignore") as f:
     gemeenten_geo = json.load(f)
 
 # ---------------------------------------------------------
