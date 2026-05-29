@@ -1,9 +1,0 @@
-streamlit
-pandas
-geopandas
-folium
-streamlit-folium
-cbsodata
-shapely
-pyproj
-fiona
