@@ -2,10 +2,27 @@ import streamlit as st
 import pandas as pd
 import json
 import folium
+import unicodedata
 from streamlit_folium import st_folium
 
 # ---------------------------------------------------------
-# 1. DATA INLADEN
+# 1. HULPFUNCTIE VOOR NAAM-NORMALISATIE
+# ---------------------------------------------------------
+
+def normalize(s):
+    if not isinstance(s, str):
+        s = str(s)
+
+    s = s.lower().strip()
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.replace("-", " ").replace("’", "'").replace("`", "'")
+    s = " ".join(s.split())
+    return s
+
+
+# ---------------------------------------------------------
+# 2. DATA INLADEN
 # ---------------------------------------------------------
 
 @st.cache_data
@@ -13,7 +30,6 @@ def load_data():
     df = pd.read_csv("screening.csv", sep=";")
     df.columns = [c.strip() for c in df.columns]
 
-    # Percentage naar float
     df["Percentage"] = (
         df["Percentage"]
         .astype(str)
@@ -21,10 +37,9 @@ def load_data():
         .astype(float)
     )
 
-    # Gemeente opschonen (strip-fix)
     df["Gemeente"] = df["Gemeente"].astype(str).str.strip()
+    df["Gemeente_norm"] = df["Gemeente"].apply(normalize)
 
-    # Risico-classificatie
     def classify_risk(p):
         if p < 60:
             return "Hoog"
@@ -48,7 +63,7 @@ df = load_data()
 gemeenten_geo = load_geo()
 
 # ---------------------------------------------------------
-# 2. AUTOMATISCHE DETECTIE VAN GEMEENTENAAM-VELD
+# 3. AUTOMATISCHE DETECTIE VAN GEMEENTENAAM-VELD
 # ---------------------------------------------------------
 
 mogelijke_naamvelden = [
@@ -72,7 +87,15 @@ if naamveld is None:
 st.sidebar.success(f"Gemeentenaam-veld gedetecteerd: **{naamveld}**")
 
 # ---------------------------------------------------------
-# 3. STREAMLIT LAYOUT
+# 4. NORMALISATIE TOEVOEGEN AAN GEOJSON
+# ---------------------------------------------------------
+
+for f in gemeenten_geo["features"]:
+    naam = f["properties"].get(naamveld, "")
+    f["properties"]["naam_norm"] = normalize(naam)
+
+# ---------------------------------------------------------
+# 5. STREAMLIT UI
 # ---------------------------------------------------------
 
 st.title("📊 Borstkanker Risico Monitor")
@@ -87,31 +110,21 @@ risico_filter = st.sidebar.selectbox(
 df_filtered = df[df["Risico"] == risico_filter]
 
 # ---------------------------------------------------------
-# 4. KAART MAKEN
+# 6. KAART MAKEN
 # ---------------------------------------------------------
 
 m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
 
 def style_function(feature):
-    naam = feature["properties"].get(naamveld)
+    naam_norm = feature["properties"].get("naam_norm")
 
-    if naam is None:
-        return {
-            "fillColor": "lightgray",
-            "color": "black",
-            "weight": 0.3,
-            "fillOpacity": 0.3,
-        }
+    if naam_norm is None:
+        return {"fillColor": "lightgray", "color": "black", "weight": 0.3, "fillOpacity": 0.3}
 
-    row = df_filtered.loc[df_filtered["Gemeente"] == naam]
+    row = df_filtered.loc[df_filtered["Gemeente_norm"] == naam_norm]
 
     if row.empty:
-        return {
-            "fillColor": "lightgray",
-            "color": "black",
-            "weight": 0.3,
-            "fillOpacity": 0.3,
-        }
+        return {"fillColor": "lightgray", "color": "black", "weight": 0.3, "fillOpacity": 0.3}
 
     perc = float(row["Percentage"].iloc[0])
 
@@ -122,12 +135,7 @@ def style_function(feature):
     else:
         kleur = "green"
 
-    return {
-        "fillColor": kleur,
-        "color": "black",
-        "weight": 0.5,
-        "fillOpacity": 0.7,
-    }
+    return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.7}
 
 
 folium.GeoJson(
@@ -142,7 +150,7 @@ folium.GeoJson(
 ).add_to(m)
 
 # ---------------------------------------------------------
-# 5. WEERGAVE
+# 7. WEERGAVE
 # ---------------------------------------------------------
 
 st.subheader("🗺️ Kaart")
