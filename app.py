@@ -14,12 +14,10 @@ df = pd.read_csv("screening.csv", sep=";")
 # GeoJSON met gemeentegrenzen
 import codecs
 
-import requests
+import json
 
-url = "https://raw.githubusercontent.com/KoenVdBerg/geojson-nl/master/gemeenten_2021.geojson"
-response = requests.get(url)
-
-gemeenten_geo = response.json()
+with open("gemeenten_geo.json", "r") as f:
+    gemeenten_geo = json.load(f)
 
 # ---------------------------------------------------------
 # 2. STREAMLIT LAYOUT
