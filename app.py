@@ -136,7 +136,7 @@ df_filtered = df[df["Risico"] == risico_filter]
 # 8. KAART
 # ---------------------------------------------------------
 
-m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
+m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="Stamen Toner Lite")
 
 def style_function(feature):
     naam_norm = feature["properties"]["naam_norm"]
