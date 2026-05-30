@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import folium
 import unicodedata
+import requests
 from streamlit_folium import st_folium
 
 # ---------------------------------------------------------
@@ -68,11 +69,25 @@ def load_geo():
         return json.load(f)
 
 
+# ---------------------------------------------------------
+# 3. LIVE MAMMOBUSSEN INLADEN
+# ---------------------------------------------------------
+
+@st.cache_data
+def load_mammobussen():
+    url = "https://www.bevolkingsonderzoeknederland.nl/api/GetborstkankerLocations"
+    response = requests.get(url)
+    data = response.json()
+    return pd.DataFrame(data)
+
+
 df = load_data()
 geo = load_geo()
+bussen = load_mammobussen()
+
 
 # ---------------------------------------------------------
-# 3. NAAMVELD DETECTIE
+# 4. NAAMVELD DETECTIE
 # ---------------------------------------------------------
 
 mogelijke_naamvelden = ["statnaam", "naam", "GM_NAAM", "NAAM", "label", "LABEL"]
@@ -83,16 +98,18 @@ if naamveld is None:
     st.error("Geen gemeentenaam-veld gevonden.")
     st.stop()
 
+
 # ---------------------------------------------------------
-# 4. NORMALISATIE TOEVOEGEN AAN GEOJSON
+# 5. NORMALISATIE TOEVOEGEN AAN GEOJSON
 # ---------------------------------------------------------
 
 for f in geo["features"]:
     naam_norm = normalize(f["properties"][naamveld])
     f["properties"]["naam_norm"] = naam_norm
 
+
 # ---------------------------------------------------------
-# 5. LOOKUP-TABEL
+# 6. LOOKUP-TABEL
 # ---------------------------------------------------------
 
 lookup = (
@@ -102,8 +119,9 @@ lookup = (
     .to_dict(orient="index")
 )
 
+
 # ---------------------------------------------------------
-# 6. RISICO TOEVOEGEN AAN GEOJSON
+# 7. RISICO + PERCENTAGE TOEVOEGEN AAN GEOJSON
 # ---------------------------------------------------------
 
 for f in geo["features"]:
@@ -117,13 +135,12 @@ for f in geo["features"]:
 
 
 # ---------------------------------------------------------
-# 7. CENTROID FUNCTIE (zonder shapely)
+# 8. CENTROID FUNCTIE (zonder shapely)
 # ---------------------------------------------------------
 
 def polygon_centroid(coords):
     """Bereken centroid van Polygon of MultiPolygon."""
     if isinstance(coords[0][0][0], list):  
-        # MultiPolygon → neem eerste polygon
         coords = coords[0]
 
     xs = [p[0] for p in coords[0]]
@@ -132,10 +149,10 @@ def polygon_centroid(coords):
 
 
 # ---------------------------------------------------------
-# 8. STREAMLIT UI
+# 9. STREAMLIT UI
 # ---------------------------------------------------------
 
-st.title("📊 Borstkanker Risico Monitor")
+st.title("📊 Borstkanker Risico Monitor + Mammobussen")
 
 risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Hoog"])
 df_filtered = df[df["Risico"] == risico_filter]
@@ -143,8 +160,9 @@ df_filtered = df[df["Risico"] == risico_filter]
 alle_gemeenten = sorted([f["properties"][naamveld] for f in geo["features"]])
 gekozen_gemeente = st.sidebar.selectbox("Zoom naar gemeente:", ["(geen)"] + alle_gemeenten)
 
+
 # ---------------------------------------------------------
-# 9. KAART CENTER & ZOOM
+# 10. KAART CENTER & ZOOM
 # ---------------------------------------------------------
 
 center = [52.1, 5.3]
@@ -160,8 +178,9 @@ if gekozen_gemeente != "(geen)":
 
 m = folium.Map(location=center, zoom_start=zoom, tiles="cartodbpositron")
 
+
 # ---------------------------------------------------------
-# 10. KLEURFUNCTIE
+# 11. KLEURFUNCTIE
 # ---------------------------------------------------------
 
 def get_color(risico):
@@ -183,11 +202,13 @@ def style_function(feature):
         "fillOpacity": 0.8,
     }
 
+
 tooltip = folium.GeoJsonTooltip(
     fields=[naamveld, "Risico", "Percentage"],
     aliases=["Gemeente:", "Risico:", "Opkomst (%):"],
     localize=True
 )
+
 
 folium.GeoJson(
     geo,
@@ -199,16 +220,39 @@ folium.GeoJson(
     show=True
 ).add_to(m)
 
-folium.LayerControl().add_to(m)
 
 # ---------------------------------------------------------
-# 11. LEGENDA
+# 12. MAMMOBUSSEN TOEVOEGEN
+# ---------------------------------------------------------
+
+for _, row in bussen.iterrows():
+    popup_html = f"""
+    <b>{row['name']}</b><br>
+    {row['intro']}<br><br>
+    <b>Adres:</b> {row['fullAddress']}<br>
+    <b>Datum:</b> {row['date']}<br><br>
+    <a href='https://www.bevolkingsonderzoeknederland.nl{row['url']}' target='_blank'>Meer info</a>
+    """
+
+    folium.Marker(
+        location=[row["lat"], row["lng"]],
+        popup=popup_html,
+        tooltip=f"{row['name']}",
+        icon=folium.Icon(color="blue", icon="info-sign")
+    ).add_to(m)
+
+
+folium.LayerControl().add_to(m)
+
+
+# ---------------------------------------------------------
+# 13. LEGENDA
 # ---------------------------------------------------------
 
 legend_html = """
 <div style="
 position: fixed; 
-bottom: 50px; left: 50px; width: 160px; height: 150px; 
+bottom: 50px; left: 50px; width: 180px; height: 170px; 
 background-color: white; z-index:9999; 
 border:2px solid grey; border-radius:8px; padding:10px;">
 <b>Legenda</b><br>
@@ -216,12 +260,14 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 <i style="background:orange; width:20px; height:20px; float:left; margin-right:8px;"></i> Midden risico<br>
 <i style="background:green; width:20px; height:20px; float:left; margin-right:8px;"></i> Laag risico<br>
 <i style="background:lightgrey; width:20px; height:20px; float:left; margin-right:8px;"></i> Geen data<br>
+<i style="background:blue; width:20px; height:20px; float:left; margin-right:8px;"></i> Mammobus<br>
 </div>
 """
 m.get_root().html.add_child(folium.Element(legend_html))
 
+
 # ---------------------------------------------------------
-# 12. WEERGAVE
+# 14. WEERGAVE
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
