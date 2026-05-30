@@ -141,25 +141,12 @@ df_filtered = df[df["Risico"] == risico_filter]
 m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
 
 def style_function(feature):
-    naam_norm = feature["properties"]["naam_norm"]
-
-    if naam_norm not in lookup:
-        return {"fillColor": "lightgray", "color": "black", "weight": 0.3, "fillOpacity": 0.3}
-
-    info = lookup[naam_norm]
-
-    if info["Risico"] != risico_filter:
-        return {"fillColor": "lightgray", "color": "black", "weight": 0.3, "fillOpacity": 0.2}
-
-    p = info["Percentage"]
-    if p < 60:
-        kleur = "red"
-    elif p < 70:
-        kleur = "orange"
-    else:
-        kleur = "green"
-
-    return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.9}
+    return {
+        "fillColor": "red",
+        "color": "black",
+        "weight": 0.5,
+        "fillOpacity": 0.9,
+    }
 
 
 # ⭐ DE FIX: overlay=True + control=True + show=True
