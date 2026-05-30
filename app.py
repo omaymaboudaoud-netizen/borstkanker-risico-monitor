@@ -6,14 +6,12 @@ import unicodedata
 from streamlit_folium import st_folium
 
 # ---------------------------------------------------------
-# 1. HULPFUNCTIE VOOR NAAM-NORMALISATIE
+# 1. NORMALISATIE
 # ---------------------------------------------------------
-
 
 def normalize(s):
     if not isinstance(s, str):
         s = str(s)
-
     s = s.lower().strip()
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
@@ -26,11 +24,13 @@ def normalize(s):
 # 2. DATA INLADEN
 # ---------------------------------------------------------
 
-
 @st.cache_data
 def load_data():
     df = pd.read_csv("screening.csv", sep=";")
     df.columns = [c.strip() for c in df.columns]
+
+    # ❗ Alleen borstkanker (anders dubbele gemeenten)
+    df = df[df["Screening"].str.contains("Borstkanker", case=False)]
 
     df["Percentage"] = (
         df["Percentage"]
@@ -57,141 +57,115 @@ def load_data():
 @st.cache_data
 def load_geo():
     with open("gemeenten_geo.json", "r", encoding="utf-8") as f:
-        geo = json.load(f)
-    return geo
+        return json.load(f)
 
 
 df = load_data()
-gemeenten_geo = load_geo()
+geo = load_geo()
 
 # ---------------------------------------------------------
-# 3. AUTOMATISCHE DETECTIE VAN GEMEENTENAAM-VELD
+# 3. NAAMVELD DETECTIE
 # ---------------------------------------------------------
 
-mogelijke_naamvelden = [
-    "GM_NAAM",
-    "naam",
-    "NAAM",
-    "Name",
-    "Gemeentenaam",
-    "gemeentenaam",
-    "GEMEENTENAAM",
-    "label",
-    "LABEL",
-]
+mogelijke_naamvelden = ["naam", "GM_NAAM", "NAAM", "label", "LABEL"]
+properties = geo["features"][0]["properties"]
 
-properties = gemeenten_geo["features"][0]["properties"]
-
-naamveld = None
-for veld in mogelijke_naamvelden:
-    if veld in properties:
-        naamveld = veld
-        break
-
+naamveld = next((v for v in mogelijke_naamvelden if v in properties), None)
 if naamveld is None:
-    st.error("Kon geen gemeentenaam-veld vinden in GeoJSON properties.")
-    st.write("Beschikbare velden:", list(properties.keys()))
+    st.error("Geen gemeentenaam-veld gevonden.")
     st.stop()
-
-st.sidebar.success(f"Gemeentenaam-veld gedetecteerd: **{naamveld}**")
 
 # ---------------------------------------------------------
 # 4. NORMALISATIE TOEVOEGEN AAN GEOJSON
 # ---------------------------------------------------------
 
-for f in gemeenten_geo["features"]:
-    naam = f["properties"].get(naamveld, "")
-    f["properties"]["naam_norm"] = normalize(naam)
+for f in geo["features"]:
+    f["properties"]["naam_norm"] = normalize(f["properties"][naamveld])
 
 # ---------------------------------------------------------
-# 5. STREAMLIT UI
+# 5. LOOKUP-TABEL
 # ---------------------------------------------------------
 
-st.title("📊 Borstkanker Risico Monitor")
-st.write("Interactieve kaart van Nederland met screeningspercentages per gemeente.")
-
-st.sidebar.header("Filters")
-risico_filter = st.sidebar.selectbox(
-    "Selecteer risico:",
-    ["Laag", "Midden", "Hoog"],
-)
-
-df_filtered = df[df["Risico"] == risico_filter].copy()
-
-# ---------------------------------------------------------
-# 6. LOOKUP-TABEL VOOR KAART (MAPPING FIX)
-# ---------------------------------------------------------
-# Zorg dat elke Gemeente_norm maximaal één keer voorkomt
-
-df_lookup = (
-    df_filtered
-    .sort_values("Percentage")  # of een andere logica
-    .drop_duplicates(subset="Gemeente_norm", keep="last")
-)
-
-gemeente_dict = (
-    df_lookup
+lookup = (
+    df
+    .drop_duplicates(subset="Gemeente_norm")
     .set_index("Gemeente_norm")[["Percentage", "Risico", "Gemeente"]]
     .to_dict(orient="index")
 )
 
 # ---------------------------------------------------------
-# 7. KAART MAKEN
+# 6. STREAMLIT UI
+# ---------------------------------------------------------
+
+st.title("📊 Borstkanker Risico Monitor")
+
+risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Hoog"])
+df_filtered = df[df["Risico"] == risico_filter]
+
+# ---------------------------------------------------------
+# 7. KAART
 # ---------------------------------------------------------
 
 m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
 
-
 def style_function(feature):
-    naam_norm = feature["properties"].get("naam_norm")
+    naam_norm = feature["properties"]["naam_norm"]
 
-    if not naam_norm or naam_norm not in gemeente_dict:
-        return {
-            "fillColor": "lightgray",
-            "color": "black",
-            "weight": 0.3,
-            "fillOpacity": 0.3,
-        }
+    if naam_norm not in lookup:
+        return {"fillColor": "lightgray", "color": "black", "weight": 0.3, "fillOpacity": 0.3}
 
-    info = gemeente_dict[naam_norm]
-    perc = float(info["Percentage"])
+    info = lookup[naam_norm]
 
-    if perc < 60:
+    if info["Risico"] != risico_filter:
+        return {"fillColor": "lightgray", "color": "black", "weight": 0.3, "fillOpacity": 0.2}
+
+    p = info["Percentage"]
+    if p < 60:
         kleur = "red"
-    elif perc < 70:
+    elif p < 70:
         kleur = "orange"
     else:
         kleur = "green"
 
-    return {
-        "fillColor": kleur,
-        "color": "black",
-        "weight": 0.5,
-        "fillOpacity": 0.7,
-    }
+    return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.7}
 
 
 folium.GeoJson(
-    gemeenten_geo,
-    name="Gemeenten",
+    geo,
     style_function=style_function,
     tooltip=folium.GeoJsonTooltip(
         fields=[naamveld],
         aliases=["Gemeente:"],
-        localize=True,
-    ),
+        localize=True
+    )
 ).add_to(m)
 
 # ---------------------------------------------------------
-# 8. WEERGAVE
+# 8. LEGENDA
 # ---------------------------------------------------------
 
-st.subheader("🗺️ Kaart")
+legend_html = """
+<div style="
+position: fixed; 
+bottom: 50px; left: 50px; width: 160px; height: 130px; 
+background-color: white; z-index:9999; 
+border:2px solid grey; border-radius:8px; padding:10px;">
+<b>Legenda</b><br>
+<i style="background:red; width:20px; height:20px; float:left; margin-right:8px;"></i> Hoog risico<br>
+<i style="background:orange; width:20px; height:20px; float:left; margin-right:8px;"></i> Midden risico<br>
+<i style="background:green; width:20px; height:20px; float:left; margin-right:8px;"></i> Laag risico<br>
+</div>
+"""
+m.get_root().html.add_child(folium.Element(legend_html))
+
+# ---------------------------------------------------------
+# 9. WEERGAVE
+# ---------------------------------------------------------
+
 st_folium(m, width=900, height=600)
 
-st.subheader("📋 Gegevens per gemeente")
 st.dataframe(
     df_filtered[["Gemeente", "Percentage", "Risico"]]
-    .sort_values("Percentage", ascending=True)
+    .sort_values("Percentage")
     .reset_index(drop=True)
 )
