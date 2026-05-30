@@ -159,6 +159,11 @@ def style_function(feature):
 
     return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.9}
 
+# ---------------------------------------------------------
+# TEST: controleer of style_function kleuren teruggeeft
+# ---------------------------------------------------------
+st.write("Voorbeeld kleurtest:")
+st.write([style_function(f) for f in geo["features"][:5]])
 
 folium.GeoJson(
     geo,
