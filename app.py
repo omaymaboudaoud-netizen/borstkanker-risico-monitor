@@ -77,7 +77,7 @@ geo = load_geo()
 # 3. NAAMVELD DETECTIE
 # ---------------------------------------------------------
 
-mogelijke_naamvelden = ["naam", "GM_NAAM", "NAAM", "label", "LABEL"]
+mogelijke_naamvelden = ["statnaam", "naam", "GM_NAAM", "NAAM", "label", "LABEL"]
 properties = geo["features"][0]["properties"]
 
 naamveld = next((v for v in mogelijke_naamvelden if v in properties), None)
