@@ -29,7 +29,7 @@ def load_data():
     df = pd.read_csv("screening.csv", sep=";")
     df.columns = [c.strip() for c in df.columns]
 
-    # ❗ Alleen borstkanker (anders dubbele gemeenten)
+    # ❗ Alleen borstkanker (anders dubbele gemeenten → lookup crash)
     df = df[df["Screening"].str.contains("Borstkanker", case=False)]
 
     df["Percentage"] = (
@@ -41,6 +41,16 @@ def load_data():
 
     df["Gemeente"] = df["Gemeente"].astype(str).str.strip()
     df["Gemeente_norm"] = df["Gemeente"].apply(normalize)
+
+    # ❗ Mapping voor fout gecodeerde of afwijkende namen
+    naam_mapping = {
+        "s gravenhage": "'s gravenhage",
+        "s hertogenbosch": "'s hertogenbosch",
+        "noardeast frysla¢n": "noardeast fryslan",
+        "saodwest frysla¢n": "sudwest fryslan",
+    }
+
+    df["Gemeente_norm"] = df["Gemeente_norm"].replace(naam_mapping)
 
     def classify_risk(p):
         if p < 60:
@@ -80,7 +90,10 @@ if naamveld is None:
 # ---------------------------------------------------------
 
 for f in geo["features"]:
-    f["properties"]["naam_norm"] = normalize(f["properties"][naamveld])
+    naam_norm = normalize(f["properties"][naamveld])
+    naam_norm = naam_norm.replace("’", "'")  # apostrof fix
+    f["properties"]["naam_norm"] = naam_norm
+
 
 # ---------------------------------------------------------
 # 5. LOOKUP-TABEL
@@ -92,8 +105,9 @@ lookup = (
     .set_index("Gemeente_norm")[["Percentage", "Risico", "Gemeente"]]
     .to_dict(orient="index")
 )
+
 # ---------------------------------------------------------
-# DEBUG: MATCHING ANALYSE
+# 6. DEBUG (kan later uit)
 # ---------------------------------------------------------
 
 geo_norms = sorted({f["properties"]["naam_norm"] for f in geo["features"]})
@@ -109,12 +123,8 @@ st.sidebar.write([g for g in geo_norms if g not in csv_norms][:30])
 st.sidebar.write("Niet in GeoJSON (maar wel in CSV):")
 st.sidebar.write([c for c in csv_norms if c not in geo_norms][:30])
 
-st.sidebar.write("Voorbeeld normalisatie:")
-st.sidebar.write("CSV →", df["Gemeente"].iloc[0], "→", df["Gemeente_norm"].iloc[0])
-st.sidebar.write("GeoJSON →", geo["features"][0]["properties"][naamveld], "→", geo["features"][0]["properties"]["naam_norm"])
-
 # ---------------------------------------------------------
-# 6. STREAMLIT UI
+# 7. STREAMLIT UI
 # ---------------------------------------------------------
 
 st.title("📊 Borstkanker Risico Monitor")
@@ -123,7 +133,7 @@ risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Ho
 df_filtered = df[df["Risico"] == risico_filter]
 
 # ---------------------------------------------------------
-# 7. KAART
+# 8. KAART
 # ---------------------------------------------------------
 
 m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
@@ -161,7 +171,7 @@ folium.GeoJson(
 ).add_to(m)
 
 # ---------------------------------------------------------
-# 8. LEGENDA
+# 9. LEGENDA
 # ---------------------------------------------------------
 
 legend_html = """
@@ -179,7 +189,7 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 m.get_root().html.add_child(folium.Element(legend_html))
 
 # ---------------------------------------------------------
-# 9. WEERGAVE
+# 10. WEERGAVE
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
