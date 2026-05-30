@@ -4,7 +4,6 @@ import json
 import folium
 import unicodedata
 from streamlit_folium import st_folium
-from shapely.geometry import shape
 
 # ---------------------------------------------------------
 # 1. NORMALISATIE
@@ -116,7 +115,22 @@ for f in geo["features"]:
 
 
 # ---------------------------------------------------------
-# 7. STREAMLIT UI
+# 7. CENTROID FUNCTIE (zonder shapely)
+# ---------------------------------------------------------
+
+def polygon_centroid(coords):
+    """Bereken centroid van Polygon of MultiPolygon."""
+    if isinstance(coords[0][0][0], list):  
+        # MultiPolygon → neem eerste polygon
+        coords = coords[0]
+
+    xs = [p[0] for p in coords[0]]
+    ys = [p[1] for p in coords[0]]
+    return sum(ys)/len(ys), sum(xs)/len(xs)
+
+
+# ---------------------------------------------------------
+# 8. STREAMLIT UI
 # ---------------------------------------------------------
 
 st.title("📊 Borstkanker Risico Monitor")
@@ -124,12 +138,11 @@ st.title("📊 Borstkanker Risico Monitor")
 risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Hoog"])
 df_filtered = df[df["Risico"] == risico_filter]
 
-# Dropdown voor zoom
 alle_gemeenten = sorted([f["properties"][naamveld] for f in geo["features"]])
 gekozen_gemeente = st.sidebar.selectbox("Zoom naar gemeente:", ["(geen)"] + alle_gemeenten)
 
 # ---------------------------------------------------------
-# 8. KAART CENTER & ZOOM
+# 9. KAART CENTER & ZOOM
 # ---------------------------------------------------------
 
 center = [52.1, 5.3]
@@ -138,16 +151,15 @@ zoom = 7
 if gekozen_gemeente != "(geen)":
     for f in geo["features"]:
         if f["properties"][naamveld] == gekozen_gemeente:
-            poly = shape(f["geometry"])
-            centroid = poly.centroid
-            center = [centroid.y, centroid.x]
+            cy, cx = polygon_centroid(f["geometry"]["coordinates"])
+            center = [cy, cx]
             zoom = 10
             break
 
 m = folium.Map(location=center, zoom_start=zoom, tiles="cartodbpositron")
 
 # ---------------------------------------------------------
-# 9. KLEURFUNCTIE
+# 10. KLEURFUNCTIE
 # ---------------------------------------------------------
 
 def get_color(risico):
@@ -188,7 +200,7 @@ folium.GeoJson(
 folium.LayerControl().add_to(m)
 
 # ---------------------------------------------------------
-# 10. LEGENDA
+# 11. LEGENDA
 # ---------------------------------------------------------
 
 legend_html = """
@@ -207,7 +219,7 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 m.get_root().html.add_child(folium.Element(legend_html))
 
 # ---------------------------------------------------------
-# 11. WEERGAVE
+# 12. WEERGAVE
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
