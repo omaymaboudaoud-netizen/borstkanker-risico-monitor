@@ -92,6 +92,26 @@ lookup = (
     .set_index("Gemeente_norm")[["Percentage", "Risico", "Gemeente"]]
     .to_dict(orient="index")
 )
+# ---------------------------------------------------------
+# DEBUG: MATCHING ANALYSE
+# ---------------------------------------------------------
+
+geo_norms = sorted({f["properties"]["naam_norm"] for f in geo["features"]})
+csv_norms = sorted(set(df["Gemeente_norm"]))
+
+st.sidebar.subheader("🔍 Matching analyse")
+st.sidebar.write("Aantal gemeenten in GeoJSON:", len(geo_norms))
+st.sidebar.write("Aantal gemeenten in CSV:", len(csv_norms))
+
+st.sidebar.write("Niet in CSV (maar wel in GeoJSON):")
+st.sidebar.write([g for g in geo_norms if g not in csv_norms][:30])
+
+st.sidebar.write("Niet in GeoJSON (maar wel in CSV):")
+st.sidebar.write([c for c in csv_norms if c not in geo_norms][:30])
+
+st.sidebar.write("Voorbeeld normalisatie:")
+st.sidebar.write("CSV →", df["Gemeente"].iloc[0], "→", df["Gemeente_norm"].iloc[0])
+st.sidebar.write("GeoJSON →", geo["features"][0]["properties"][naamveld], "→", geo["features"][0]["properties"]["naam_norm"])
 
 # ---------------------------------------------------------
 # 6. STREAMLIT UI
