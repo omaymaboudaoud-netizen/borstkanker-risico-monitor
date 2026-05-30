@@ -4,6 +4,8 @@ import json
 import folium
 import unicodedata
 import requests
+import re
+from datetime import datetime
 from streamlit_folium import st_folium
 
 # ---------------------------------------------------------
@@ -22,7 +24,48 @@ def normalize(s):
 
 
 # ---------------------------------------------------------
-# 2. Data inladen (screening + gemeenten)
+# 2. Parse einddatum uit tekst
+# ---------------------------------------------------------
+
+def extract_end_date(intro_text, start_date):
+    """
+    Haalt einddatum uit tekst zoals:
+    - 'tot eind juni'
+    - 'tot eind november'
+    - 'tot begin augustus'
+    - 'tot eind juli'
+    """
+
+    maanden = {
+        "januari": 1, "februari": 2, "maart": 3, "april": 4,
+        "mei": 5, "juni": 6, "juli": 7, "augustus": 8,
+        "september": 9, "oktober": 10, "november": 11, "december": 12
+    }
+
+    text = intro_text.lower()
+
+    match = re.search(r"tot (eind|begin) ([a-z]+)", text)
+    if match:
+        positie = match.group(1)
+        maand_naam = match.group(2)
+
+        if maand_naam in maanden:
+            maand = maanden[maand_naam]
+            jaar = start_date.year
+
+            if positie == "begin":
+                dag = 5
+            else:
+                dag = 25
+
+            return datetime(jaar, maand, dag)
+
+    # fallback: 90 dagen actief
+    return start_date + pd.Timedelta(days=90)
+
+
+# ---------------------------------------------------------
+# 3. Data inladen (screening + gemeenten)
 # ---------------------------------------------------------
 
 @st.cache_data
@@ -70,7 +113,7 @@ def load_geo():
 
 
 # ---------------------------------------------------------
-# 3. Live mammobussen / onderzoekscentra inladen
+# 4. Live mammobussen / onderzoekscentra inladen
 # ---------------------------------------------------------
 
 @st.cache_data
@@ -79,7 +122,14 @@ def load_mammobussen():
     response = requests.get(url)
     response.raise_for_status()
     data = response.json()
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+
+    df["start"] = pd.to_datetime(df["dateDate"], errors="coerce")
+    df["end"] = df.apply(lambda r: extract_end_date(r["intro"], r["start"]), axis=1)
+
+    df["city_norm"] = df["city"].apply(normalize)
+
+    return df
 
 
 df = load_data()
@@ -88,7 +138,7 @@ bussen = load_mammobussen()
 
 
 # ---------------------------------------------------------
-# 4. Naamveld detectie in GeoJSON
+# 5. Naamveld detectie in GeoJSON
 # ---------------------------------------------------------
 
 mogelijke_naamvelden = ["statnaam", "naam", "GM_NAAM", "NAAM", "label", "LABEL"]
@@ -101,7 +151,7 @@ if naamveld is None:
 
 
 # ---------------------------------------------------------
-# 5. Normalisatie toevoegen aan GeoJSON
+# 6. Normalisatie toevoegen aan GeoJSON
 # ---------------------------------------------------------
 
 for f in geo["features"]:
@@ -110,7 +160,7 @@ for f in geo["features"]:
 
 
 # ---------------------------------------------------------
-# 6. Lookup-tabel uit screening-data
+# 7. Lookup-tabel uit screening-data
 # ---------------------------------------------------------
 
 lookup = (
@@ -122,7 +172,7 @@ lookup = (
 
 
 # ---------------------------------------------------------
-# 7. Risico + percentage toevoegen aan GeoJSON
+# 8. Risico + percentage toevoegen aan GeoJSON
 # ---------------------------------------------------------
 
 for f in geo["features"]:
@@ -136,22 +186,19 @@ for f in geo["features"]:
 
 
 # ---------------------------------------------------------
-# 8. Centroid-functie (zonder shapely)
+# 9. Centroid-functie (zonder shapely)
 # ---------------------------------------------------------
 
 def polygon_centroid(coords):
-    """Bereken centroid van Polygon of MultiPolygon."""
-    # MultiPolygon: [[[[]]]], Polygon: [[[]]]
     if isinstance(coords[0][0][0], list):
         coords = coords[0]
-
     xs = [p[0] for p in coords[0]]
     ys = [p[1] for p in coords[0]]
     return sum(ys) / len(ys), sum(xs) / len(xs)
 
 
 # ---------------------------------------------------------
-# 9. Streamlit UI + datumfilter
+# 10. Streamlit UI + datumfilter
 # ---------------------------------------------------------
 
 st.title("📊 Borstkanker-risico & screeningslocaties in Nederland")
@@ -172,23 +219,18 @@ datum_filter = st.radio(
 vandaag = pd.Timestamp.today().normalize()
 
 def filter_bussen(df_bussen, keuze):
-    df_b = df_bussen.copy()
-    df_b["dateDate"] = pd.to_datetime(df_b["dateDate"], errors="coerce")
-
     if keuze == "Vandaag actief":
-    # Alle locaties die al gestart zijn (en dus nu actief zijn)
-    return df_b[df_b["dateDate"] <= vandaag]
+        return df_bussen[(df_bussen["start"] <= vandaag) & (df_bussen["end"] >= vandaag)]
 
     elif keuze == "Komende 7 dagen":
-        return df_b[(df_b["dateDate"] >= vandaag) &
-                    (df_b["dateDate"] <= vandaag + pd.Timedelta(days=7))]
+        return df_bussen[(df_bussen["start"] > vandaag) &
+                         (df_bussen["start"] <= vandaag + pd.Timedelta(days=7))]
 
     elif keuze == "Komende 30 dagen":
-        return df_b[(df_b["dateDate"] >= vandaag) &
-                    (df_b["dateDate"] <= vandaag + pd.Timedelta(days=30))]
+        return df_bussen[(df_bussen["start"] > vandaag) &
+                         (df_bussen["start"] <= vandaag + pd.Timedelta(days=30))]
 
-    else:
-        return df_b
+    return df_bussen
 
 bussen_filtered = filter_bussen(bussen, datum_filter)
 
@@ -200,7 +242,7 @@ gekozen_gemeente = st.sidebar.selectbox("Zoom naar gemeente:", ["(geen)"] + alle
 
 
 # ---------------------------------------------------------
-# 10. Kaart center & zoom
+# 11. Kaart center & zoom
 # ---------------------------------------------------------
 
 center = [52.1, 5.3]
@@ -218,7 +260,7 @@ m = folium.Map(location=center, zoom_start=zoom, tiles="cartodbpositron")
 
 
 # ---------------------------------------------------------
-# 11. Kleurfunctie + stijl
+# 12. Gemeenten tekenen
 # ---------------------------------------------------------
 
 def get_color(risico):
@@ -260,28 +302,23 @@ folium.GeoJson(
 
 
 # ---------------------------------------------------------
-# 12. Mammobussen / centra toevoegen (gefilterd)
+# 13. Mammobussen toevoegen
 # ---------------------------------------------------------
 
 for _, row in bussen_filtered.iterrows():
-    name = row.get("name", "")
-    intro = row.get("intro", "")
-    full_address = row.get("fullAddress", "")
-    date = row.get("date", "")
-    url_path = row.get("url", "")
-
     popup_html = f"""
-    <b>{name}</b><br>
-    {intro}<br><br>
-    <b>Adres:</b> {full_address}<br>
-    <b>Datum:</b> {date}<br><br>
-    <a href='https://www.bevolkingsonderzoeknederland.nl{url_path}' target='_blank'>Meer info</a>
+    <b>{row['name']}</b><br>
+    {row['intro']}<br><br>
+    <b>Adres:</b> {row['fullAddress']}<br>
+    <b>Start:</b> {row['start'].date()}<br>
+    <b>Eind:</b> {row['end'].date()}<br><br>
+    <a href='https://www.bevolkingsonderzoeknederland.nl{row['url']}' target='_blank'>Meer info</a>
     """
 
     folium.Marker(
         location=[row["lat"], row["lng"]],
         popup=popup_html,
-        tooltip=name,
+        tooltip=row["name"],
         icon=folium.Icon(color="blue", icon="info-sign")
     ).add_to(m)
 
@@ -290,7 +327,7 @@ folium.LayerControl().add_to(m)
 
 
 # ---------------------------------------------------------
-# 13. Legenda
+# 14. Legenda
 # ---------------------------------------------------------
 
 legend_html = """
@@ -311,7 +348,7 @@ m.get_root().html.add_child(folium.Element(legend_html))
 
 
 # ---------------------------------------------------------
-# 14. Weergave kaart + tabel
+# 15. Weergave kaart + tabel
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
@@ -325,7 +362,7 @@ st.dataframe(
 
 
 # ---------------------------------------------------------
-# 15. Analyse: gemeenten die NU / BINNEN 30 DAGEN aandacht nodig hebben
+# 16. Analyse: NU en BINNEN 30 DAGEN
 # ---------------------------------------------------------
 
 st.subheader("🔎 Gemeenten die NU of BINNENKORT aandacht nodig hebben (risico: Hoog + Midden)")
@@ -333,17 +370,14 @@ st.subheader("🔎 Gemeenten die NU of BINNENKORT aandacht nodig hebben (risico:
 df_risico = df[df["Risico"].isin(["Hoog", "Midden"])].copy()
 df_risico["Gemeente_norm"] = df_risico["Gemeente"].apply(normalize)
 
-bussen["city_norm"] = bussen["city"].apply(normalize)
-bussen["dateDate"] = pd.to_datetime(bussen["dateDate"], errors="coerce")
-
-# NU aandacht: bus is gestart en dus nu actief
-nu_actief = bussen[bussen["dateDate"] <= vandaag]
+# NU actief
+nu_actief = bussen[(bussen["start"] <= vandaag) & (bussen["end"] >= vandaag)]
 gemeenten_nu = df_risico[df_risico["Gemeente_norm"].isin(nu_actief["city_norm"])]
 
-# Binnen 30 dagen aandacht
+# Binnen 30 dagen
 binnenkort = bussen[
-    (bussen["dateDate"] > vandaag) &
-    (bussen["dateDate"] <= vandaag + pd.Timedelta(days=30))
+    (bussen["start"] > vandaag) &
+    (bussen["start"] <= vandaag + pd.Timedelta(days=30))
 ]
 gemeenten_binnenkort = df_risico[df_risico["Gemeente_norm"].isin(binnenkort["city_norm"])]
 
