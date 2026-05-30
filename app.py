@@ -4,6 +4,7 @@ import json
 import folium
 import unicodedata
 from streamlit_folium import st_folium
+from shapely.geometry import shape
 
 # ---------------------------------------------------------
 # 1. NORMALISATIE
@@ -123,12 +124,31 @@ st.title("📊 Borstkanker Risico Monitor")
 risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Hoog"])
 df_filtered = df[df["Risico"] == risico_filter]
 
+# Dropdown voor zoom
+alle_gemeenten = sorted([f["properties"][naamveld] for f in geo["features"]])
+gekozen_gemeente = st.sidebar.selectbox("Zoom naar gemeente:", ["(geen)"] + alle_gemeenten)
 
 # ---------------------------------------------------------
-# 8. KAART
+# 8. KAART CENTER & ZOOM
 # ---------------------------------------------------------
 
-m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
+center = [52.1, 5.3]
+zoom = 7
+
+if gekozen_gemeente != "(geen)":
+    for f in geo["features"]:
+        if f["properties"][naamveld] == gekozen_gemeente:
+            poly = shape(f["geometry"])
+            centroid = poly.centroid
+            center = [centroid.y, centroid.x]
+            zoom = 10
+            break
+
+m = folium.Map(location=center, zoom_start=zoom, tiles="cartodbpositron")
+
+# ---------------------------------------------------------
+# 9. KLEURFUNCTIE
+# ---------------------------------------------------------
 
 def get_color(risico):
     if risico == "Hoog":
@@ -168,13 +188,13 @@ folium.GeoJson(
 folium.LayerControl().add_to(m)
 
 # ---------------------------------------------------------
-# 9. LEGENDA (MATCHT PERFECT MET DE KLEUREN)
+# 10. LEGENDA
 # ---------------------------------------------------------
 
 legend_html = """
 <div style="
 position: fixed; 
-bottom: 50px; left: 50px; width: 160px; height: 130px; 
+bottom: 50px; left: 50px; width: 160px; height: 150px; 
 background-color: white; z-index:9999; 
 border:2px solid grey; border-radius:8px; padding:10px;">
 <b>Legenda</b><br>
@@ -187,7 +207,7 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 m.get_root().html.add_child(folium.Element(legend_html))
 
 # ---------------------------------------------------------
-# 10. WEERGAVE
+# 11. WEERGAVE
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
