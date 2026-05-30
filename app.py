@@ -7,7 +7,7 @@ import requests
 from streamlit_folium import st_folium
 
 # ---------------------------------------------------------
-# 1. NORMALISATIE
+# 1. Normalisatie
 # ---------------------------------------------------------
 
 def normalize(s):
@@ -22,7 +22,7 @@ def normalize(s):
 
 
 # ---------------------------------------------------------
-# 2. DATA INLADEN
+# 2. Data inladen (screening + gemeenten)
 # ---------------------------------------------------------
 
 @st.cache_data
@@ -70,13 +70,14 @@ def load_geo():
 
 
 # ---------------------------------------------------------
-# 3. LIVE MAMMOBUSSEN INLADEN
+# 3. Live mammobussen / onderzoekscentra inladen
 # ---------------------------------------------------------
 
 @st.cache_data
 def load_mammobussen():
-    url = "https://www.bevolkingsonderzoeknederland.nl/api/GetborstkankerLocations"
+    url = "https://www.bevolkingsonderzoeknederland.nl/umbraco/Bevolkingsonderzoek/MapApi/GetborstkankerLocations?1780150115"
     response = requests.get(url)
+    response.raise_for_status()
     data = response.json()
     return pd.DataFrame(data)
 
@@ -87,7 +88,7 @@ bussen = load_mammobussen()
 
 
 # ---------------------------------------------------------
-# 4. NAAMVELD DETECTIE
+# 4. Naamveld detectie in GeoJSON
 # ---------------------------------------------------------
 
 mogelijke_naamvelden = ["statnaam", "naam", "GM_NAAM", "NAAM", "label", "LABEL"]
@@ -95,12 +96,12 @@ properties = geo["features"][0]["properties"]
 
 naamveld = next((v for v in mogelijke_naamvelden if v in properties), None)
 if naamveld is None:
-    st.error("Geen gemeentenaam-veld gevonden.")
+    st.error("Geen gemeentenaam-veld gevonden in GeoJSON.")
     st.stop()
 
 
 # ---------------------------------------------------------
-# 5. NORMALISATIE TOEVOEGEN AAN GEOJSON
+# 5. Normalisatie toevoegen aan GeoJSON
 # ---------------------------------------------------------
 
 for f in geo["features"]:
@@ -109,7 +110,7 @@ for f in geo["features"]:
 
 
 # ---------------------------------------------------------
-# 6. LOOKUP-TABEL
+# 6. Lookup-tabel uit screening-data
 # ---------------------------------------------------------
 
 lookup = (
@@ -121,7 +122,7 @@ lookup = (
 
 
 # ---------------------------------------------------------
-# 7. RISICO + PERCENTAGE TOEVOEGEN AAN GEOJSON
+# 7. Risico + percentage toevoegen aan GeoJSON
 # ---------------------------------------------------------
 
 for f in geo["features"]:
@@ -135,26 +136,27 @@ for f in geo["features"]:
 
 
 # ---------------------------------------------------------
-# 8. CENTROID FUNCTIE (zonder shapely)
+# 8. Centroid-functie (zonder shapely)
 # ---------------------------------------------------------
 
 def polygon_centroid(coords):
     """Bereken centroid van Polygon of MultiPolygon."""
-    if isinstance(coords[0][0][0], list):  
+    # MultiPolygon: [[[[]]]], Polygon: [[[]]]
+    if isinstance(coords[0][0][0], list):
         coords = coords[0]
 
     xs = [p[0] for p in coords[0]]
     ys = [p[1] for p in coords[0]]
-    return sum(ys)/len(ys), sum(xs)/len(xs)
+    return sum(ys) / len(ys), sum(xs) / len(xs)
 
 
 # ---------------------------------------------------------
-# 9. STREAMLIT UI
+# 9. Streamlit UI
 # ---------------------------------------------------------
 
-st.title("📊 Borstkanker Risico Monitor + Mammobussen")
+st.title("📊 Borstkanker-risico & screeningslocaties in Nederland")
 
-risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Hoog"])
+risico_filter = st.sidebar.selectbox("Filter op risico:", ["Laag", "Midden", "Hoog"])
 df_filtered = df[df["Risico"] == risico_filter]
 
 alle_gemeenten = sorted([f["properties"][naamveld] for f in geo["features"]])
@@ -162,7 +164,7 @@ gekozen_gemeente = st.sidebar.selectbox("Zoom naar gemeente:", ["(geen)"] + alle
 
 
 # ---------------------------------------------------------
-# 10. KAART CENTER & ZOOM
+# 10. Kaart center & zoom
 # ---------------------------------------------------------
 
 center = [52.1, 5.3]
@@ -180,7 +182,7 @@ m = folium.Map(location=center, zoom_start=zoom, tiles="cartodbpositron")
 
 
 # ---------------------------------------------------------
-# 11. KLEURFUNCTIE
+# 11. Kleurfunctie + stijl
 # ---------------------------------------------------------
 
 def get_color(risico):
@@ -192,6 +194,7 @@ def get_color(risico):
         return "green"
     else:
         return "lightgrey"
+
 
 def style_function(feature):
     risico = feature["properties"].get("Risico")
@@ -209,7 +212,6 @@ tooltip = folium.GeoJsonTooltip(
     localize=True
 )
 
-
 folium.GeoJson(
     geo,
     name="Gemeenten",
@@ -222,22 +224,29 @@ folium.GeoJson(
 
 
 # ---------------------------------------------------------
-# 12. MAMMOBUSSEN TOEVOEGEN
+# 12. Mammobussen / centra toevoegen
 # ---------------------------------------------------------
 
 for _, row in bussen.iterrows():
+    # Sommige velden kunnen ontbreken, dus veilig ophalen
+    name = row.get("name", "")
+    intro = row.get("intro", "")
+    full_address = row.get("fullAddress", "")
+    date = row.get("date", "")
+    url_path = row.get("url", "")
+
     popup_html = f"""
-    <b>{row['name']}</b><br>
-    {row['intro']}<br><br>
-    <b>Adres:</b> {row['fullAddress']}<br>
-    <b>Datum:</b> {row['date']}<br><br>
-    <a href='https://www.bevolkingsonderzoeknederland.nl{row['url']}' target='_blank'>Meer info</a>
+    <b>{name}</b><br>
+    {intro}<br><br>
+    <b>Adres:</b> {full_address}<br>
+    <b>Datum:</b> {date}<br><br>
+    <a href='https://www.bevolkingsonderzoeknederland.nl{url_path}' target='_blank'>Meer info</a>
     """
 
     folium.Marker(
         location=[row["lat"], row["lng"]],
         popup=popup_html,
-        tooltip=f"{row['name']}",
+        tooltip=name,
         icon=folium.Icon(color="blue", icon="info-sign")
     ).add_to(m)
 
@@ -246,13 +255,13 @@ folium.LayerControl().add_to(m)
 
 
 # ---------------------------------------------------------
-# 13. LEGENDA
+# 13. Legenda
 # ---------------------------------------------------------
 
 legend_html = """
 <div style="
 position: fixed; 
-bottom: 50px; left: 50px; width: 180px; height: 170px; 
+bottom: 50px; left: 50px; width: 190px; height: 180px; 
 background-color: white; z-index:9999; 
 border:2px solid grey; border-radius:8px; padding:10px;">
 <b>Legenda</b><br>
@@ -260,18 +269,19 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 <i style="background:orange; width:20px; height:20px; float:left; margin-right:8px;"></i> Midden risico<br>
 <i style="background:green; width:20px; height:20px; float:left; margin-right:8px;"></i> Laag risico<br>
 <i style="background:lightgrey; width:20px; height:20px; float:left; margin-right:8px;"></i> Geen data<br>
-<i style="background:blue; width:20px; height:20px; float:left; margin-right:8px;"></i> Mammobus<br>
+<i style="background:blue; width:20px; height:20px; float:left; margin-right:8px;"></i> Mammobus / centrum<br>
 </div>
 """
 m.get_root().html.add_child(folium.Element(legend_html))
 
 
 # ---------------------------------------------------------
-# 14. WEERGAVE
+# 14. Weergave
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
 
+st.subheader(f"Gemeenten met risico: {risico_filter}")
 st.dataframe(
     df_filtered[["Gemeente", "Percentage", "Risico"]]
     .sort_values("Percentage")
