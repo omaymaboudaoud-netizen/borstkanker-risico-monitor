@@ -28,7 +28,10 @@ def normalize(s):
 @st.cache_data
 def load_data():
     df = pd.read_csv("screening.csv", sep=";")
-    df.columns = [c.strip() for c in df.columns]
+df.columns = [c.strip() for c in df.columns]
+
+# ❗ Alleen borstkanker selecteren (anders dubbele gemeenten)
+df = df[df["Screening"].str.contains("Borstkanker", case=False)]
 
     # Percentage naar float
     df["Percentage"] = (
