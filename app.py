@@ -29,7 +29,6 @@ def load_data():
     df = pd.read_csv("screening.csv", sep=";")
     df.columns = [c.strip() for c in df.columns]
 
-    # ❗ Alleen borstkanker (anders dubbele gemeenten)
     df = df[df["Screening"].str.contains("Borstkanker", case=False)]
 
     df["Percentage"] = (
@@ -42,7 +41,6 @@ def load_data():
     df["Gemeente"] = df["Gemeente"].astype(str).str.strip()
     df["Gemeente_norm"] = df["Gemeente"].apply(normalize)
 
-    # ❗ Mapping voor fout gecodeerde of afwijkende namen
     naam_mapping = {
         "s gravenhage": "'s gravenhage",
         "s hertogenbosch": "'s hertogenbosch",
@@ -91,9 +89,7 @@ if naamveld is None:
 
 for f in geo["features"]:
     naam_norm = normalize(f["properties"][naamveld])
-    naam_norm = naam_norm.replace("’", "'")  # apostrof fix
     f["properties"]["naam_norm"] = naam_norm
-
 
 # ---------------------------------------------------------
 # 5. LOOKUP-TABEL
@@ -107,21 +103,15 @@ lookup = (
 )
 
 # ---------------------------------------------------------
-# 6. DEBUG (kan later uit)
+# 6. RISICO TOEVOEGEN AAN GEOJSON
 # ---------------------------------------------------------
 
-geo_norms = sorted({f["properties"]["naam_norm"] for f in geo["features"]})
-csv_norms = sorted(set(df["Gemeente_norm"]))
-
-st.sidebar.subheader("🔍 Matching analyse")
-st.sidebar.write("Aantal gemeenten in GeoJSON:", len(geo_norms))
-st.sidebar.write("Aantal gemeenten in CSV:", len(csv_norms))
-
-st.sidebar.write("Niet in CSV (maar wel in GeoJSON):")
-st.sidebar.write([g for g in geo_norms if g not in csv_norms][:30])
-
-st.sidebar.write("Niet in GeoJSON (maar wel in CSV):")
-st.sidebar.write([c for c in csv_norms if c not in geo_norms][:30])
+for f in geo["features"]:
+    naam_norm = f["properties"]["naam_norm"]
+    if naam_norm in lookup:
+        f["properties"]["Risico"] = lookup[naam_norm]["Risico"]
+    else:
+        f["properties"]["Risico"] = None
 
 
 # ---------------------------------------------------------
@@ -140,36 +130,45 @@ df_filtered = df[df["Risico"] == risico_filter]
 
 m = folium.Map(location=[52.1, 5.3], zoom_start=7, tiles="cartodbpositron")
 
+def get_color(risico):
+    if risico == "Hoog":
+        return "red"
+    elif risico == "Midden":
+        return "orange"
+    elif risico == "Laag":
+        return "green"
+    else:
+        return "lightgrey"
+
 def style_function(feature):
+    risico = feature["properties"].get("Risico")
     return {
-        "fillColor": "red",
+        "fillColor": get_color(risico),
         "color": "black",
         "weight": 0.5,
-        "fillOpacity": 0.9,
+        "fillOpacity": 0.8,
     }
 
+tooltip = folium.GeoJsonTooltip(
+    fields=[naamveld, "Risico"],
+    aliases=["Gemeente:", "Risico:"],
+    localize=True
+)
 
-# ⭐ DE FIX: overlay=True + control=True + show=True
 folium.GeoJson(
     geo,
     name="Gemeenten",
     style_function=style_function,
-    tooltip=folium.GeoJsonTooltip(
-        fields=[naamveld],
-        aliases=["Gemeente:"],
-        localize=True
-    ),
+    tooltip=tooltip,
     overlay=True,
     control=True,
     show=True
 ).add_to(m)
 
-# ⭐ LayerControl zodat je kunt zien of de laag aan staat
 folium.LayerControl().add_to(m)
 
-
 # ---------------------------------------------------------
-# 9. LEGENDA
+# 9. LEGENDA (MATCHT PERFECT MET DE KLEUREN)
 # ---------------------------------------------------------
 
 legend_html = """
@@ -182,10 +181,10 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 <i style="background:red; width:20px; height:20px; float:left; margin-right:8px;"></i> Hoog risico<br>
 <i style="background:orange; width:20px; height:20px; float:left; margin-right:8px;"></i> Midden risico<br>
 <i style="background:green; width:20px; height:20px; float:left; margin-right:8px;"></i> Laag risico<br>
+<i style="background:lightgrey; width:20px; height:20px; float:left; margin-right:8px;"></i> Geen data<br>
 </div>
 """
 m.get_root().html.add_child(folium.Element(legend_html))
-
 
 # ---------------------------------------------------------
 # 10. WEERGAVE
