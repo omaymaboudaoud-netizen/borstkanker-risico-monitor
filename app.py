@@ -29,7 +29,7 @@ def load_data():
     df = pd.read_csv("screening.csv", sep=";")
     df.columns = [c.strip() for c in df.columns]
 
-    # ❗ Alleen borstkanker (anders dubbele gemeenten → lookup crash)
+    # ❗ Alleen borstkanker (anders dubbele gemeenten)
     df = df[df["Screening"].str.contains("Borstkanker", case=False)]
 
     df["Percentage"] = (
@@ -123,6 +123,7 @@ st.sidebar.write([g for g in geo_norms if g not in csv_norms][:30])
 st.sidebar.write("Niet in GeoJSON (maar wel in CSV):")
 st.sidebar.write([c for c in csv_norms if c not in geo_norms][:30])
 
+
 # ---------------------------------------------------------
 # 7. STREAMLIT UI
 # ---------------------------------------------------------
@@ -131,6 +132,7 @@ st.title("📊 Borstkanker Risico Monitor")
 
 risico_filter = st.sidebar.selectbox("Selecteer risico:", ["Laag", "Midden", "Hoog"])
 df_filtered = df[df["Risico"] == risico_filter]
+
 
 # ---------------------------------------------------------
 # 8. KAART
@@ -159,21 +161,25 @@ def style_function(feature):
 
     return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.9}
 
-# ---------------------------------------------------------
-# TEST: controleer of style_function kleuren teruggeeft
-# ---------------------------------------------------------
-st.write("Voorbeeld kleurtest:")
-st.write([style_function(f) for f in geo["features"][:5]])
 
+# ⭐ DE FIX: overlay=True + control=True + show=True
 folium.GeoJson(
     geo,
+    name="Gemeenten",
     style_function=style_function,
     tooltip=folium.GeoJsonTooltip(
         fields=[naamveld],
         aliases=["Gemeente:"],
         localize=True
-    )
+    ),
+    overlay=True,
+    control=True,
+    show=True
 ).add_to(m)
+
+# ⭐ LayerControl zodat je kunt zien of de laag aan staat
+folium.LayerControl().add_to(m)
+
 
 # ---------------------------------------------------------
 # 9. LEGENDA
@@ -192,6 +198,7 @@ border:2px solid grey; border-radius:8px; padding:10px;">
 </div>
 """
 m.get_root().html.add_child(folium.Element(legend_html))
+
 
 # ---------------------------------------------------------
 # 10. WEERGAVE
