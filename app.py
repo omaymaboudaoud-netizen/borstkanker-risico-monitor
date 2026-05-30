@@ -151,10 +151,45 @@ def polygon_centroid(coords):
 
 
 # ---------------------------------------------------------
-# 9. Streamlit UI
+# 9. Streamlit UI + datumfilter
 # ---------------------------------------------------------
 
 st.title("📊 Borstkanker-risico & screeningslocaties in Nederland")
+
+st.subheader("📅 Filter mammobussen op datum")
+
+datum_filter = st.radio(
+    "Toon mammobussen voor:",
+    [
+        "Alle locaties",
+        "Vandaag actief",
+        "Komende 7 dagen",
+        "Komende 30 dagen"
+    ],
+    horizontal=True
+)
+
+vandaag = pd.Timestamp.today().normalize()
+
+def filter_bussen(df_bussen, keuze):
+    df_b = df_bussen.copy()
+    df_b["dateDate"] = pd.to_datetime(df_b["dateDate"], errors="coerce")
+
+    if keuze == "Vandaag actief":
+        return df_b[df_b["dateDate"] == vandaag]
+
+    elif keuze == "Komende 7 dagen":
+        return df_b[(df_b["dateDate"] >= vandaag) &
+                    (df_b["dateDate"] <= vandaag + pd.Timedelta(days=7))]
+
+    elif keuze == "Komende 30 dagen":
+        return df_b[(df_b["dateDate"] >= vandaag) &
+                    (df_b["dateDate"] <= vandaag + pd.Timedelta(days=30))]
+
+    else:
+        return df_b
+
+bussen_filtered = filter_bussen(bussen, datum_filter)
 
 risico_filter = st.sidebar.selectbox("Filter op risico:", ["Laag", "Midden", "Hoog"])
 df_filtered = df[df["Risico"] == risico_filter]
@@ -224,11 +259,10 @@ folium.GeoJson(
 
 
 # ---------------------------------------------------------
-# 12. Mammobussen / centra toevoegen
+# 12. Mammobussen / centra toevoegen (gefilterd)
 # ---------------------------------------------------------
 
-for _, row in bussen.iterrows():
-    # Sommige velden kunnen ontbreken, dus veilig ophalen
+for _, row in bussen_filtered.iterrows():
     name = row.get("name", "")
     intro = row.get("intro", "")
     full_address = row.get("fullAddress", "")
@@ -276,7 +310,7 @@ m.get_root().html.add_child(folium.Element(legend_html))
 
 
 # ---------------------------------------------------------
-# 14. Weergave
+# 14. Weergave kaart + tabel
 # ---------------------------------------------------------
 
 st_folium(m, width=900, height=600)
@@ -287,3 +321,47 @@ st.dataframe(
     .sort_values("Percentage")
     .reset_index(drop=True)
 )
+
+
+# ---------------------------------------------------------
+# 15. Analyse: gemeenten die NU / BINNEN 30 DAGEN aandacht nodig hebben
+# ---------------------------------------------------------
+
+st.subheader("🔎 Gemeenten die NU of BINNENKORT aandacht nodig hebben (risico: Hoog + Midden)")
+
+df_risico = df[df["Risico"].isin(["Hoog", "Midden"])].copy()
+df_risico["Gemeente_norm"] = df_risico["Gemeente"].apply(normalize)
+
+bussen["city_norm"] = bussen["city"].apply(normalize)
+bussen["dateDate"] = pd.to_datetime(bussen["dateDate"], errors="coerce")
+
+# NU aandacht: bus staat er vandaag
+nu_actief = bussen[bussen["dateDate"] == vandaag]
+gemeenten_nu = df_risico[df_risico["Gemeente_norm"].isin(nu_actief["city_norm"])]
+
+# Binnen 30 dagen aandacht
+binnenkort = bussen[
+    (bussen["dateDate"] > vandaag) &
+    (bussen["dateDate"] <= vandaag + pd.Timedelta(days=30))
+]
+gemeenten_binnenkort = df_risico[df_risico["Gemeente_norm"].isin(binnenkort["city_norm"])]
+
+st.markdown("### 🟢 Gemeenten die **NU** aandacht nodig hebben")
+if len(gemeenten_nu) == 0:
+    st.write("Geen gemeenten met actieve mammobus vandaag (voor risico Hoog + Midden).")
+else:
+    st.dataframe(
+        gemeenten_nu[["Gemeente", "Percentage", "Risico"]]
+        .sort_values("Percentage")
+        .reset_index(drop=True)
+    )
+
+st.markdown("### 🟡 Gemeenten die **binnen 30 dagen** aandacht nodig hebben")
+if len(gemeenten_binnenkort) == 0:
+    st.write("Geen gemeenten met geplande mammobus binnen 30 dagen (voor risico Hoog + Midden).")
+else:
+    st.dataframe(
+        gemeenten_binnenkort[["Gemeente", "Percentage", "Risico"]]
+        .sort_values("Percentage")
+        .reset_index(drop=True)
+    )
