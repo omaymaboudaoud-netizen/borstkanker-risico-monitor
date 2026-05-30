@@ -176,7 +176,8 @@ def filter_bussen(df_bussen, keuze):
     df_b["dateDate"] = pd.to_datetime(df_b["dateDate"], errors="coerce")
 
     if keuze == "Vandaag actief":
-        return df_b[df_b["dateDate"] == vandaag]
+    # Alle locaties die al gestart zijn (en dus nu actief zijn)
+    return df_b[df_b["dateDate"] <= vandaag]
 
     elif keuze == "Komende 7 dagen":
         return df_b[(df_b["dateDate"] >= vandaag) &
@@ -335,8 +336,8 @@ df_risico["Gemeente_norm"] = df_risico["Gemeente"].apply(normalize)
 bussen["city_norm"] = bussen["city"].apply(normalize)
 bussen["dateDate"] = pd.to_datetime(bussen["dateDate"], errors="coerce")
 
-# NU aandacht: bus staat er vandaag
-nu_actief = bussen[bussen["dateDate"] == vandaag]
+# NU aandacht: bus is gestart en dus nu actief
+nu_actief = bussen[bussen["dateDate"] <= vandaag]
 gemeenten_nu = df_risico[df_risico["Gemeente_norm"].isin(nu_actief["city_norm"])]
 
 # Binnen 30 dagen aandacht
