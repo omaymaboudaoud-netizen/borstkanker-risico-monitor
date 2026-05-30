@@ -157,7 +157,7 @@ def style_function(feature):
     else:
         kleur = "green"
 
-    return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.9}
+    return {"fillColor": kleur, "color": "black", "weight": 0.5, "fillOpacity": 0.3}
 
 
 folium.GeoJson(
