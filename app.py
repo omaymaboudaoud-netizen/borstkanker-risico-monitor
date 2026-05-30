@@ -110,8 +110,10 @@ for f in geo["features"]:
     naam_norm = f["properties"]["naam_norm"]
     if naam_norm in lookup:
         f["properties"]["Risico"] = lookup[naam_norm]["Risico"]
+        f["properties"]["Percentage"] = lookup[naam_norm]["Percentage"]
     else:
         f["properties"]["Risico"] = None
+        f["properties"]["Percentage"] = None
 
 
 # ---------------------------------------------------------
@@ -182,8 +184,8 @@ def style_function(feature):
     }
 
 tooltip = folium.GeoJsonTooltip(
-    fields=[naamveld, "Risico"],
-    aliases=["Gemeente:", "Risico:"],
+    fields=[naamveld, "Risico", "Percentage"],
+    aliases=["Gemeente:", "Risico:", "Opkomst (%):"],
     localize=True
 )
 
