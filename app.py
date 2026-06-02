@@ -365,7 +365,7 @@ st.dataframe(
 # 16. Analyse: NU en BINNEN 30 DAGEN
 # ---------------------------------------------------------
 
-st.subheader("🔎 Gemeenten die NU of BINNENKORT aandacht nodig hebben (risico: Hoog + Midden)")
+st.subheader("Gemeenten die NU of BINNENKORT aandacht nodig hebben (risico: Hoog + Midden)")
 
 df_risico = df[df["Risico"].isin(["Hoog", "Midden"])].copy()
 df_risico["Gemeente_norm"] = df_risico["Gemeente"].apply(normalize)
