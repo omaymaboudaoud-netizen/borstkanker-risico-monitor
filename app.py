@@ -201,9 +201,9 @@ def polygon_centroid(coords):
 # 10. Streamlit UI + datumfilter
 # ---------------------------------------------------------
 
-st.title("Borstkanker-risico & screeningslocaties in Nederland")
+st.title("Borstkanker Risico Monitor Nederland")
 
-st.subheader("Filter mammobussen op datum")
+st.subheader("Filter mammobussen en screeningslocaties op datum")
 
 datum_filter = st.radio(
     "Toon mammobussen voor:",
